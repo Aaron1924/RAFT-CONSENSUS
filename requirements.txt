@@ -1,0 +1,7 @@
+flask
+requests
+protobuf
+grpcio
+grpcio-tools
+pymongo
+python-dotenv
