@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Raft Nodes Status</title>
+    <style>
+        .node { margin: 10px; padding: 10px; border: 1px solid #ccc; }
+        .online { background-color: #90EE90; }
+        .offline { background-color: #FFB6C1; }
+        .logs { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Raft Nodes Status</h1>
+    
+    <div class="nodes">
+        {% for node in nodes %}
+        <div class="node {{ node.status }}">
+            <h3>Node {{ node.id }} (Port {{ node.port }})</h3>
+            <p>Status: {{ node.status }}</p>
+            <p>State: {{ node.state }}</p>
+            <p>Term: {{ node.term }}</p>
+            <p>Logs Count: {{ node.logs }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="logs">
+        <h2>Recent Logs</h2>
+        <table border="1">
+            <tr>
+                <th>Term</th>
+                <th>Command</th>
+                <th>Timestamp</th>
+            </tr>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.term }}</td>
+                <td>{{ log.command }}</td>
+                <td>{{ log.timestamp }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>

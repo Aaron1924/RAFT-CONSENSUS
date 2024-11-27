@@ -2,40 +2,72 @@ syntax = "proto3";
 
 package raft;
 
+// Represents a single log entry
 message LogEntry {
-    int32 term = 1;
-    bytes command = 2;
-    int64 timestamp = 3;
+    int32 term = 1;             
+    bytes command = 2;          
+    int64 timestamp = 3;        
 }
 
+// Request for a vote during the leader election process
 message RequestVoteRequest {
-    int32 term = 1;
-    int32 candidateId = 2;
-    int64 lastLogIndex = 3;
-    int64 lastLogTerm = 4;
+    int32 term = 1;             
+    int32 candidateId = 2;      
+    int64 lastLogIndex = 3;     
+    int64 lastLogTerm = 4;      
 }
 
+// The response to a RequestVote
 message RequestVoteResponse {
-    bool voteGranted = 1;
-    int32 term = 2;
+    bool voteGranted = 1;       
+    int32 term = 2;             
 }
 
+// Request for appending log entries from the leader to followers
 message AppendEntriesRequest {
-    int32 term = 1;
-    int32 leaderId = 2;
-    int64 prevLogIndex = 3;
-    int64 prevLogTerm = 4;
-    repeated LogEntry entries = 5;
-    int64 leaderCommit = 6;
+    int32 term = 1;             
+    int32 leaderId = 2;         
+    int64 prevLogIndex = 3;     
+    int64 prevLogTerm = 4;      
+    repeated LogEntry entries = 5; 
+    int64 leaderCommit = 6;     
 }
 
+// The response to an AppendEntries request
 message AppendEntriesResponse {
-    int32 term = 1;
-    bool success = 2;
-    int64 matchIndex = 3;
+    int32 term = 1;             
+    bool success = 2;           
+    int64 matchIndex = 3;       
 }
 
+// Heartbeat message from the leader to followers
+message HeartbeatRequest {
+    int32 term = 1;             
+    int32 leaderId = 2;         
+}
+
+// Response to heartbeat request
+message HeartbeatResponse {
+    int32 term = 1;             
+    bool success = 2;           
+}
+
+// Status request/response
+message StatusRequest {
+    int32 node_id = 1;
+}
+message StatusResponse {
+    string state = 1;
+    int32 current_term = 2;
+    int32 log_count = 3; 
+    bool is_leader = 4;
+
+}
+
+// Define the Raft service with all RPC methods
 service RaftService {
+    rpc Status(StatusRequest) returns (StatusResponse);
     rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse);
     rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }

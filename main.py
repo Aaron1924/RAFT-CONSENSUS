@@ -1,5 +1,8 @@
 import multiprocessing
 import config
+from dotenv import load_dotenv
+import os
+import argparse
 from raft_node import Node  # Assuming Node class is defined in raft_node.py
 
 def run_node(node_id, port, peers, db_uri, db_name, db_collection):
@@ -17,14 +20,24 @@ def run_node(node_id, port, peers, db_uri, db_name, db_collection):
         node.start_heartbeat()  # This could be managed separately if needed.
 
 if __name__ == "__main__":
-    # Get configurations from config.py
-    cfg = config.get_config()
+    # Load environment variables from .env file
+    load_dotenv()
+
+    parser = argparse.ArgumentParser(description="Run a Raft node.")
+    parser.add_argument('--node_id', type=int, required=True, help="The ID of the node.")
+    parser.add_argument('--port', type=int, default=5000, help="The port on which the node will run.")
+    parser.add_argument('--peers', nargs='+', required=True, help="List of peer addresses.")
+    parser.add_argument('--db_uri', default=os.getenv('MONGODB_URI'), help="The URI of the MongoDB database.")
+    parser.add_argument('--db_name', default=os.getenv('DB_NAME', 'raft'), help="The name of the MongoDB database.")
+    parser.add_argument('--db_collection', default=os.getenv('COLLECTION_NAME', 'logs'), help="The name of the MongoDB collection.")
+
+    args = parser.parse_args()
 
     # Create a process for each node
     processes = []
-    for id in range(len(cfg['peers'])):
-        port = 5000 + id
-        proc = multiprocessing.Process(target=run_node, args=(id, port, cfg['peers'], cfg['db_uri'], cfg['db_name'], cfg['db_collection']))
+    for id in range(len(args.peers)):
+        port = args.port + id
+        proc = multiprocessing.Process(target=run_node, args=(id, port, args.peers, args.db_uri, args.db_name, args.db_collection))
         processes.append(proc)
         proc.start()  # Start the node process
 

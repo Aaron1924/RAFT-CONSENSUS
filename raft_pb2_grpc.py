@@ -26,7 +26,8 @@ if _version_not_supported:
 
 
 class RaftServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """Define the Raft service with all RPC methods
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -34,6 +35,11 @@ class RaftServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.Status = channel.unary_unary(
+                '/raft.RaftService/Status',
+                request_serializer=raft__pb2.StatusRequest.SerializeToString,
+                response_deserializer=raft__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.RequestVote = channel.unary_unary(
                 '/raft.RaftService/RequestVote',
                 request_serializer=raft__pb2.RequestVoteRequest.SerializeToString,
@@ -44,10 +50,22 @@ class RaftServiceStub(object):
                 request_serializer=raft__pb2.AppendEntriesRequest.SerializeToString,
                 response_deserializer=raft__pb2.AppendEntriesResponse.FromString,
                 _registered_method=True)
+        self.Heartbeat = channel.unary_unary(
+                '/raft.RaftService/Heartbeat',
+                request_serializer=raft__pb2.HeartbeatRequest.SerializeToString,
+                response_deserializer=raft__pb2.HeartbeatResponse.FromString,
+                _registered_method=True)
 
 
 class RaftServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """Define the Raft service with all RPC methods
+    """
+
+    def Status(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def RequestVote(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -61,9 +79,20 @@ class RaftServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Heartbeat(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RaftServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'Status': grpc.unary_unary_rpc_method_handler(
+                    servicer.Status,
+                    request_deserializer=raft__pb2.StatusRequest.FromString,
+                    response_serializer=raft__pb2.StatusResponse.SerializeToString,
+            ),
             'RequestVote': grpc.unary_unary_rpc_method_handler(
                     servicer.RequestVote,
                     request_deserializer=raft__pb2.RequestVoteRequest.FromString,
@@ -74,6 +103,11 @@ def add_RaftServiceServicer_to_server(servicer, server):
                     request_deserializer=raft__pb2.AppendEntriesRequest.FromString,
                     response_serializer=raft__pb2.AppendEntriesResponse.SerializeToString,
             ),
+            'Heartbeat': grpc.unary_unary_rpc_method_handler(
+                    servicer.Heartbeat,
+                    request_deserializer=raft__pb2.HeartbeatRequest.FromString,
+                    response_serializer=raft__pb2.HeartbeatResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'raft.RaftService', rpc_method_handlers)
@@ -83,7 +117,35 @@ def add_RaftServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class RaftService(object):
-    """Missing associated documentation comment in .proto file."""
+    """Define the Raft service with all RPC methods
+    """
+
+    @staticmethod
+    def Status(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/raft.RaftService/Status',
+            raft__pb2.StatusRequest.SerializeToString,
+            raft__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def RequestVote(request,
@@ -129,6 +191,33 @@ class RaftService(object):
             '/raft.RaftService/AppendEntries',
             raft__pb2.AppendEntriesRequest.SerializeToString,
             raft__pb2.AppendEntriesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Heartbeat(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/raft.RaftService/Heartbeat',
+            raft__pb2.HeartbeatRequest.SerializeToString,
+            raft__pb2.HeartbeatResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -5,3 +5,5 @@ grpcio
 grpcio-tools
 pymongo
 python-dotenv
+flask
+asgiref

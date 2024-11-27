@@ -14,12 +14,12 @@ import threading
 class Node(raft_pb2_grpc.RaftServiceServicer):
     def __init__(self, node_id, db_uri, db_name, db_collection):
         self.node_id = node_id
+        self.state = "follower"
         self.current_term = 0
         self.voted_for = None
         self.log = []  # In-memory log
         self.commit_index = 0
         self.last_applied = 0
-        self.state = "follower"
         self.election_timer = None
         self.last_applied_index = 0
         self.db = raft_database.Database(db_uri, db_name, db_collection)
@@ -27,11 +27,15 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.lock = threading.Lock()
         self.heartbeat_interval = 1  # Heartbeat interval in seconds
         self.running = True
-        self.port = port
+        self.port = None  # Port for the gRPC server
+        
 
         self.recover_data()
         threading.Thread(target=self.heartbeat, daemon=True).start()  # Start heartbeat thread
 
+
+    
+    
     def recover_data(self):
         # Load the log entries from the database sorted by index
         log_entries = []
@@ -110,25 +114,54 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             
     
     def run(self, port):
+        """Start the gRPC server for the Raft node."""
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
         raft_pb2_grpc.add_RaftServiceServicer_to_server(self, server)
         server.add_insecure_port(f'[::]:{port}')
         server.start()
         logging.info(f"Node {self.node_id} is listening on port {port}")
         server.wait_for_termination()  # Keep the server running
+        
+    def create_client(self, peer_address):
+        """Create a gRPC client connection to a peer node."""
+        channel = grpc.insecure_channel(peer_address)
+        return raft_pb2_grpc.RaftServiceStub(channel)
+
+    def query_peer_status(self, peer_address):
+        """Query the status of a peer node."""
+        client = self.create_client(peer_address)
+        response = client.Status(raft_pb2.StatusRequest())
+        return response
             
     def Status(self, request, context):
         return raft_pb2.StatusResponse(
             state=self.state,
             current_term=self.current_term,
-            logs=self.log,
+            log_count=len(self.log),
+            is_leader=(self.state == "leader")
         )
+    
+    def start_heartbeat(self):
+        """Start the heartbeats for leader nodes."""
+        while True:
+            time.sleep(2)  # Heartbeat interval
+            if self.state == "leader":
+                for peer in self.peers:
+                    self.send_heartbeat(peer)  # Call to send heartbeat to peers
+
+    def send_heartbeat(self, peer):
+        client = self.create_client(peer)
+        try:
+            response = client.Heartbeat(raft_pb2.HeartbeatRequest(term=self.current_term, leaderId=self.node_id))
+            logging.info(f"Heartbeat sent from {self.node_id} to {peer}. Response: {response.success}")
+        except grpc.RpcError as e:
+            logging.error(f"Failed to send heartbeat to {peer}: {e}")
                     
         
 
     def close(self):
         self.db.close()
-        self.server.stop(0)  # Use the existing gRPC server reference if needed
+        self.running = False  # Use the existing gRPC server reference if needed
         
         
 import config
