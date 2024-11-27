@@ -1,60 +1,42 @@
 import os
-import raft_node  # Ensure this import statement is present
-import time
-import logging
-import threading
-import grpc
-from concurrent import futures
-import raft_pb2_grpc  # Adjust import if needed
-from dotenv import load_dotenv
+import sys
+import multiprocessing
+import config
+from raft_node import Node  # Assuming Node class is defined in raft_node.py
 
-def serve(node_instance, port):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    raft_pb2_grpc.add_RaftServiceServicer_to_server(node_instance, server)  # Pass your node instance
-    server.add_insecure_port(f'[::]:{port}')  # Use the provided port
-    server.start()
-    server.wait_for_termination()
+def run_node(node_id, port, peers, db_uri, db_name, db_collection):
+    # Create a Node instance and start the server
+    node = Node(node_id=node_id, db_uri=db_uri, db_name=db_name, db_collection=db_collection)
 
-def main():
-    # Load configuration from .env file
-    load_dotenv()
-    db_uri = os.getenv("MONGODB_URI")
-    db_name = os.getenv("DB_NAME")
-    db_collection = os.getenv("COLLECTION_NAME")
-    node_count = int(os.getenv("NODE_COUNT"))
-
-    # Validate configuration.  Critical to catch issues early!
-    if not db_uri:
-        logging.critical("MONGODB_URI environment variable not set!")
-        return
-    if node_count < 1:
-        logging.critical("NODE_COUNT must be a positive integer!")
-        return
-
-    # Initialize Raft nodes
-    nodes = []
-    base_port = 50051  # Starting port number
-    for i in range(1, node_count + 1):
-        node_instance = raft_node.Node(i, db_uri, db_name, db_collection)
-        nodes.append((node_instance, base_port + i - 1))  # Assign a unique port to each node
-
-    # Start the gRPC servers for each node:
-    servers = []
-    for node_instance, port in nodes:
-        server_thread = threading.Thread(target=serve, args=(node_instance, port))
-        servers.append(server_thread)
-        server_thread.start()
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Shutting down servers...")
-        for server in servers:
-            server.join()
-        for node_instance, _ in nodes:
-            node_instance.close()
-        print("Servers shut down.")
+    # Start the gRPC server for the node
+    node.run(port)  # You should implement this method in the Node class
 
 if __name__ == "__main__":
-    main()
+    # Get configuration parameters from config.py
+    cfg = config.get_config()
+
+    # Extract configuration for better readability
+    node_id = cfg['node_id']
+    port = cfg['port']
+    peers = cfg['peers']
+    db_uri = cfg['db_uri']
+    db_name = cfg['db_name']
+    db_collection = cfg['db_collection']
+
+    # Create a process for each node
+    processes = []
+
+    for id in range(len(peers)):
+        # Use the same peer list for each node, adjusting based on node_id
+        current_peers = [f"localhost:{5000 + i}" for i in range(len(peers))]
+
+        # Create a new process for each node
+        proc = multiprocessing.Process(target=run_node, args=(id, 5000 + id, current_peers, db_uri, db_name, db_collection))
+        processes.append(proc)
+        proc.start()  # Start the node process
+
+    # Optionally: Wait for all processes to finish (non-blocking), or implement signal handling
+    for proc in processes:
+        proc.join()  # This blocks until the process is finished; you might want to manage termination more gracefully
+
+    print("All nodes have been started.")
