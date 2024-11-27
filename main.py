@@ -1,42 +1,35 @@
-import os
-import sys
 import multiprocessing
 import config
 from raft_node import Node  # Assuming Node class is defined in raft_node.py
 
 def run_node(node_id, port, peers, db_uri, db_name, db_collection):
-    # Create a Node instance and start the server
+    # Create a Node instance and run the server
     node = Node(node_id=node_id, db_uri=db_uri, db_name=db_name, db_collection=db_collection)
 
+    # Initialize peers (including localhost addresses)
+    node.peers = [f'localhost:{p}' for p in range(5000, 5000 + len(peers))]
+
     # Start the gRPC server for the node
-    node.run(port)  # You should implement this method in the Node class
+    node.run(port)  # This starts the gRPC server
+
+    # Start heartbeat for the leader node
+    if node.state == "leader":
+        node.start_heartbeat()  # This could be managed separately if needed.
 
 if __name__ == "__main__":
-    # Get configuration parameters from config.py
+    # Get configurations from config.py
     cfg = config.get_config()
-
-    # Extract configuration for better readability
-    node_id = cfg['node_id']
-    port = cfg['port']
-    peers = cfg['peers']
-    db_uri = cfg['db_uri']
-    db_name = cfg['db_name']
-    db_collection = cfg['db_collection']
 
     # Create a process for each node
     processes = []
-
-    for id in range(len(peers)):
-        # Use the same peer list for each node, adjusting based on node_id
-        current_peers = [f"localhost:{5000 + i}" for i in range(len(peers))]
-
-        # Create a new process for each node
-        proc = multiprocessing.Process(target=run_node, args=(id, 5000 + id, current_peers, db_uri, db_name, db_collection))
+    for id in range(len(cfg['peers'])):
+        port = 5000 + id
+        proc = multiprocessing.Process(target=run_node, args=(id, port, cfg['peers'], cfg['db_uri'], cfg['db_name'], cfg['db_collection']))
         processes.append(proc)
         proc.start()  # Start the node process
 
-    # Optionally: Wait for all processes to finish (non-blocking), or implement signal handling
+    # Optionally: wait for all processes to finish
     for proc in processes:
-        proc.join()  # This blocks until the process is finished; you might want to manage termination more gracefully
+        proc.join()  # Block until each node process is finished
 
     print("All nodes have been started.")
