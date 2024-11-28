@@ -10,7 +10,7 @@ source .venv/bin/activate  # For Linux/macOS
 pip install -r requirements.txt
 ```
 3. Install mongodb and run the following command to start the server
-[MongoDB Installation](https://www.mongodb.com/try/download/community-edition/releases?msockid=3b0ac080b3126d3c0845d5b4b2746c1a)
+[MongoDB Installation](https://www.mongodb.com/try/download/community)
 
 
 choose the appropriate version for your operating system, setup the server 
