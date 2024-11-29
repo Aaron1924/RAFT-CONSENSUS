@@ -20,18 +20,61 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.log = []  # In-memory log
         self.commit_index = 0
         self.last_applied = 0
-        self.election_timer = None
         self.last_applied_index = 0
-        self.db = raft_database.Database(db_uri, db_name, db_collection)
+        node_db_name = f"{db_name}_node_{node_id}"
+        self.db = raft_database.Database(db_uri, node_db_name, db_collection)
         self.peers = {}
         self.lock = threading.Lock()
-        self.heartbeat_interval = 1  # Heartbeat interval in seconds
         self.running = True
         self.port = None  # Port for the gRPC server
         
 
         self.recover_data()
-        threading.Thread(target=self.heartbeat, daemon=True).start()  # Start heartbeat thread
+        #threading.Thread(target=self.heartbeat, daemon=True).start()  # Start heartbeat thread
+    
+    
+    def start_election(self):
+        with self.lock:  # Essential for thread safety
+            if self.state != "leader": # Only start election if not already leader. This prevents multiple leaders.
+                self.state = "candidate"
+                self.current_term += 1
+                self.voted_for = self.node_id
+                votes_received = 1
+
+                for peer in self.peers:
+                    try:
+                        with grpc.insecure_channel(peer) as channel:
+                            stub = raft_pb2_grpc.RaftServiceStub(channel)
+                            request = raft_pb2.RequestVoteRequest(
+                                term=self.current_term,
+                                candidateId=self.node_id,
+                                lastLogIndex=len(self.log) -1, # Correct lastLogIndex
+                                lastLogTerm=self.log[-1].term if self.log else 0 # Correct lastLogTerm
+                            )
+                            response = stub.RequestVote(request)
+                            if response.voteGranted:
+                                votes_received += 1
+
+                    except grpc.RpcError as e:
+                        logging.error(f"Error requesting vote from {peer}: {e}")
+                        continue # Important to avoid crashing. Handle the exception and continue.
+
+                if votes_received > len(self.peers) // 2:
+                    self.state = "leader"
+                    logging.info(f"Node {self.node_id} became leader for term {self.current_term}")
+                    self.election_timer.cancel()  # Stop the timer
+                    self.start_heartbeat()  # Start heartbeat
+                else:
+                     self.state = 'follower' # Transition back to follower if election fails.
+                     # Restart election timer with randomization
+                     self.reset_election_timer()
+
+
+
+    def reset_election_timer(self):
+        timeout = random.uniform(0.15, 0.3)  # 150ms to 300ms
+        self.election_timer = threading.Timer(timeout, self.start_election)
+        self.election_timer.start()
 
 
     
@@ -56,28 +99,35 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.log.append(raft_pb2.LogEntry(term=entry['term'], command=entry['command'].encode(), timestamp=entry['timestamp']))
 
     def RequestVote(self, request, context):
-        response = raft_pb2.RequestVoteResponse()
-        if request.term > self.current_term:
-            self.current_term = request.term
+        with self.lock:
+            response = raft_pb2.RequestVoteResponse()
+            if request.term > self.current_term:
+                self.become_follower(request.term)  # Become follower if term is greater.
+
+            if (self.voted_for is None or self.voted_for == request.candidateId) and \
+               request.lastLogIndex >= len(self.log) - 1:  # Check log completeness
+                response.voteGranted = True
+                self.voted_for = request.candidateId
+                self.reset_election_timer()  # Reset timer on receiving vote requests.
+            else:
+                response.voteGranted = False
+                
+            response.term = self.current_term
+            return response
+    
+    
+    def become_follower(self, term): # Helper method for transitioning to follower state.
+        with self.lock:
+            self.state = "follower"
+            self.current_term = term
             self.voted_for = None
-            self.state = "follower"  # Reset state on term increase
-        # Voting logic
-        if self.voted_for is None or self.voted_for == request.candidateId:
-            response.term = self.current_term
-            response.voteGranted = True
-            self.voted_for = request.candidateId
-        else:
-            response.term = self.current_term
-            response.voteGranted = False
-        return response
+            self.reset_election_timer() # Ensure election timer is restarted if we revert from a candidate or leader state.
 
     def AppendEntries(self, request, context):
-        response = raft_pb2.AppendEntriesResponse()
         with self.lock:
+            response = raft_pb2.AppendEntriesResponse()
             if request.term > self.current_term:
-                self.current_term = request.term
-                self.state = "follower"
-                self.voted_for = None  # Reset voted_for to allow future elections
+                self.become_follower(request.term)  # Become follower if term is greater.
 
             # Verify the log's previous index and term
             if request.prevLogIndex < len(self.log) and self.log[request.prevLogIndex].term == request.prevLogTerm:
@@ -95,6 +145,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
             response.term = self.current_term  # Respond with current term
             return response
+    
+    
     def Heartbeat(self, request, context):
         response = raft_pb2.HeartbeatResponse()
         response.term = self.current_term
@@ -103,24 +155,32 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
     def heartbeat(self):
         while self.running:
             if self.state == "leader":
-                for peer in self.peers:
-                    with grpc.insecure_channel(peer) as channel:
-                        stub = raft_pb2_grpc.RaftServiceStub(channel)
-                        try:
-                            stub.Heartbeat(raft_pb2.HeartbeatRequest(term=self.current_term, leaderId=self.node_id))
-                        except grpc.RpcError as e:
-                            logging.error(f"Error sending heartbeat to {peer}: {e}")
+                with self.lock:
+                    for peer in self.peers:
+                        with grpc.insecure_channel(peer) as channel:
+                            stub = raft_pb2_grpc.RaftServiceStub(channel)
+                            try:
+                                stub.Heartbeat(raft_pb2.HeartbeatRequest(term=self.current_term, leaderId=self.node_id))
+                            except grpc.RpcError as e:
+                                logging.error(f"Error sending heartbeat to {peer}: {e}")
             time.sleep(self.heartbeat_interval)
             
     
     def run(self, port):
-        """Start the gRPC server for the Raft node."""
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
         raft_pb2_grpc.add_RaftServiceServicer_to_server(self, server)
         server.add_insecure_port(f'[::]:{port}')
+        self.port = port  # Store the port the server is running on.
         server.start()
+        self.reset_election_timer()  # Start election timer *after* the server starts.
         logging.info(f"Node {self.node_id} is listening on port {port}")
-        server.wait_for_termination()  # Keep the server running
+
+        try:
+            server.wait_for_termination()
+        except KeyboardInterrupt: # Allow graceful shutdown with Ctrl+C.
+            logging.info(f"Shutting down Node {self.node_id}")
+            self.running = False  # Signal the heartbeat loop to stop.
+            server.stop(5)  # Give the server 5 seconds to gracefully stop.
         
     def create_client(self, peer_address):
         """Create a gRPC client connection to a peer node."""

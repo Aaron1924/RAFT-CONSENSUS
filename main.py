@@ -3,21 +3,14 @@ import config
 from dotenv import load_dotenv
 import os
 import argparse
+import time
 from raft_node import Node  # Assuming Node class is defined in raft_node.py
 
 def run_node(node_id, port, peers, db_uri, db_name, db_collection):
-    # Create a Node instance and run the server
+    time.sleep(1*node_id)  # Add a delay to stagger node startup
     node = Node(node_id=node_id, db_uri=db_uri, db_name=db_name, db_collection=db_collection)
-
-    # Initialize peers (including localhost addresses)
-    node.peers = [f'localhost:{p}' for p in range(5000, 5000 + len(peers))]
-
-    # Start the gRPC server for the node
-    node.run(port)  # This starts the gRPC server
-
-    # Start heartbeat for the leader node
-    if node.state == "leader":
-        node.start_heartbeat()  # This could be managed separately if needed.
+    node.peers = peers # Pass the peers directly
+    node.run(port)
 
 if __name__ == "__main__":
     # Load environment variables from .env file
@@ -29,20 +22,27 @@ if __name__ == "__main__":
     parser.add_argument('--peers', nargs='+', required=True, help="List of peer addresses.")
     parser.add_argument('--db_uri', default=os.getenv('MONGODB_URI'), help="The URI of the MongoDB database.")
     parser.add_argument('--db_name', default=os.getenv('DB_NAME', 'raft'), help="The name of the MongoDB database.")
+    parser.add_argument('--num_nodes', type=int, default=5, help="The total number of nodes in the cluster.")
     parser.add_argument('--db_collection', default=os.getenv('COLLECTION_NAME', 'logs'), help="The name of the MongoDB collection.")
 
     args = parser.parse_args()
 
+    peers = [f'localhost:{args.port + i}' for i in range(args.num_nodes)]  # Create peers list here
     # Create a process for each node
     processes = []
-    for id in range(len(args.peers)):
+    for id in range(args.num_nodes):  # Iterate using num_nodes
         port = args.port + id
-        proc = multiprocessing.Process(target=run_node, args=(id, port, args.peers, args.db_uri, args.db_name, args.db_collection))
+        print(f"Node {id} will run on port {port}.")
+        proc = multiprocessing.Process(target=run_node, args=(id, port, peers, args.db_uri, args.db_name, args.db_collection))
         processes.append(proc)
-        proc.start()  # Start the node process
+        proc.start()
 
-    # Optionally: wait for all processes to finish
-    for proc in processes:
-        proc.join()  # Block until each node process is finished
+    try:
+        for proc in processes:
+            proc.join()
+    except KeyboardInterrupt:
+        print("Shutting down nodes...")  # Informative message
+        for proc in processes:  # Terminate node processes
+            proc.terminate()
 
-    print("All nodes have been started.")
+    print("All nodes have been started (or terminated).")

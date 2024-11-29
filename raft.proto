@@ -2,72 +2,68 @@ syntax = "proto3";
 
 package raft;
 
-// Represents a single log entry
 message LogEntry {
-    int32 term = 1;             
-    bytes command = 2;          
-    int64 timestamp = 3;        
+    int32 term = 1;
+    bytes command = 2;  // Better to use bytes for general commands
+    int64 timestamp = 3;
+    int64 index = 4;     // *REQUIRED* Add index to LogEntry
 }
 
-// Request for a vote during the leader election process
 message RequestVoteRequest {
-    int32 term = 1;             
-    int32 candidateId = 2;      
-    int64 lastLogIndex = 3;     
-    int64 lastLogTerm = 4;      
+    int32 term = 1;
+    int32 candidateId = 2;
+    int64 lastLogIndex = 3;
+    int64 lastLogTerm = 4;
 }
 
-// The response to a RequestVote
 message RequestVoteResponse {
-    bool voteGranted = 1;       
-    int32 term = 2;             
+    bool voteGranted = 1;
+    int32 term = 2;
 }
 
-// Request for appending log entries from the leader to followers
 message AppendEntriesRequest {
-    int32 term = 1;             
-    int32 leaderId = 2;         
-    int64 prevLogIndex = 3;     
-    int64 prevLogTerm = 4;      
-    repeated LogEntry entries = 5; 
-    int64 leaderCommit = 6;     
+    int32 term = 1;
+    int32 leaderId = 2;
+    int64 prevLogIndex = 3;
+    int64 prevLogTerm = 4;
+    repeated LogEntry entries = 5;
+    int64 leaderCommit = 6;
 }
 
-// The response to an AppendEntries request
 message AppendEntriesResponse {
-    int32 term = 1;             
-    bool success = 2;           
-    int64 matchIndex = 3;       
+    int32 term = 1;
+    bool success = 2;
+    int64 matchIndex = 3;
 }
 
-// Heartbeat message from the leader to followers
-message HeartbeatRequest {
-    int32 term = 1;             
-    int32 leaderId = 2;         
+message ClientRequest { // For client interaction
+    bytes command = 1;
+    string db_name = 2;  // Add db_name to ClientRequest
 }
 
-// Response to heartbeat request
-message HeartbeatResponse {
-    int32 term = 1;             
-    bool success = 2;           
+message ClientResponse {
+    bool success = 1;
+    string response = 2;
+    string leader_hint = 3;  // Add leader hint
 }
 
-// Status request/response
+// Status request/response (can be expanded if needed)
 message StatusRequest {
     int32 node_id = 1;
 }
+
 message StatusResponse {
     string state = 1;
     int32 current_term = 2;
-    int32 log_count = 3; 
-    bool is_leader = 4;
-
+    int64 last_log_index = 3; // more useful than a count
+    int32 log_count = 4;  // Add log_count field
+    bool is_leader = 5;
+    repeated string peers = 6; // return known peers
 }
 
-// Define the Raft service with all RPC methods
 service RaftService {
     rpc Status(StatusRequest) returns (StatusResponse);
     rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse);
     rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
-    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    rpc ClientCommand(ClientRequest) returns (ClientResponse);  // Corrected RPC name
 }
