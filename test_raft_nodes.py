@@ -10,7 +10,7 @@ import raft_pb2_grpc
 from raft_node import Node
 import threading
 import logging
-import futures
+import concurrent.futures as futures
 
 
 class TestRaftNode(unittest.TestCase):
