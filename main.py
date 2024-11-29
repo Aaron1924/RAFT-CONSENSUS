@@ -38,7 +38,7 @@ def run_node(node_id, port, peers, db_uri, db_name, db_collection):
 def get_node_status(node_id, port):
     try:
         with grpc.insecure_channel(f'localhost:{port}') as channel:
-            stub = raft_pb2_grpc.RaftNodeStub(channel)  # Use correct stub name
+            stub = raft_pb2_grpc.RaftServiceStub(channel)  # Use correct stub name
             response = stub.Status(raft_pb2.StatusRequest())  # Use correct request name
             return {
                 'node_id': node_id,
@@ -113,6 +113,21 @@ if __name__ == "__main__":
     peers = [f'localhost:{base_port + i}' for i in range(num_nodes)]
 
     # ... (Start Raft nodes - no changes)
+    
+    processes = []
+    for i in range(num_nodes):
+        port = base_port + i
+        p = multiprocessing.Process(
+            target=run_node,
+            args=(i, port, peers, db_uri, db_name, db_collection)
+        )
+        p.start()
+        processes.append(p)
+        logging.info(f"Started Raft node {i} on port {port}")
+
+    # Wait for nodes to initialize
+    time.sleep(5) 
+    
 
 
     # Find the leader - simplified
